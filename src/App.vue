@@ -1,16 +1,19 @@
 <template>
-  <TopBar/>
+  <TopBar />
+  <BusMap />
 </template>
 
 <script>
-import TopBar from './components/topBar.vue';
+import BusMap from "./components/busMap.vue";
+import TopBar from "./components/topBar.vue";
 
 export default {
-  name: 'App',
+  name: "App",
   components: {
-    TopBar
-  }
-}
+    TopBar,
+    BusMap,
+  },
+};
 </script>
 
 <style>
