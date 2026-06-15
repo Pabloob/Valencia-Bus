@@ -1,8 +1,10 @@
 <script setup>
 import { ref } from "vue";
 import SwitchTheme from "./switchTheme.vue";
+import { searchLocation } from "@/services/geoService.js";
 import { cords } from "../utils/mapStore.js";
-import { getUserLocation } from "../utils/utils.js";
+import { getUserLocation, debounce } from "../utils/utils.js";
+import errorMessage from "./errorMessage.vue";
 
 // States
 const query = ref("");
@@ -11,57 +13,36 @@ const searching = ref(false);
 const isFocused = ref(false);
 let timer = null;
 
-// Get streets based on user input
-const search = async () => {
-  searching.value = true;
+// Error variables
+const errorText = ref("");
+let errorTimer = null;
 
-  try {
-
-    const hasNumber = /\d+/.test(query.value);
-    
-    const searchText = hasNumber ? query.value : `${query.value} 1`;
-
-    const url = `https://www.cartociudad.es/geocoder/api/geocoder/candidates?q=${searchText}, Valencia&limit=5`;
-    const response = await fetch(url);
-
-    if (!response.ok) throw new Error("La API no responde");
-
-    let data = await response.json();
-
-    const numberMatch = query.value.match(/\d+/);
-    if (numberMatch) {
-      const typedNumber = numberMatch[0];
-      data = data.filter((suggestion) => {
-        if (!suggestion.portalNumber) return true;
-        return String(suggestion.portalNumber).startsWith(typedNumber);
-      });
-    }
-
-    suggestions.value = data;
-
-    return data;
-  } catch (error) {
-    suggestions.value = [];
-    return [];
-  } finally {
-    searching.value = false;
-  }
+const showError = (msg) => {
+  errorText.value = msg;
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => {
+    errorText.value = "";
+  }, 3000);
 };
 
-//
-const handleDestination = () => {
-  clearTimeout(timer);
+// Get streets based on user input
 
+const handleDestination = debounce(async () => {
   if (query.value.trim().length < 3) {
     suggestions.value = [];
-    searching.value = false;
     return;
   }
 
-  timer = setTimeout(() => {
-    search();
-  }, 150);
-};
+  searching.value = true;
+  try {
+    suggestions.value = await searchLocation(query.value);
+  } catch (error) {
+    showError("No se ha podido conectar con el buscador.");
+    suggestions.value = [];
+  } finally {
+    searching.value = false;
+  }
+}, 150);
 
 // Send cords of the selected street to the global const used in the map
 const selectDirection = (suggestion) => {
@@ -72,39 +53,44 @@ const selectDirection = (suggestion) => {
 
   query.value = `${type} ${suggestion.address}${portalNumber}`.trim();
   suggestions.value = [];
-  searching.value = false;
+  isFocused.value = false;
 
   cords.value = [parseFloat(suggestion.lat), parseFloat(suggestion.lng)];
 };
 
 //If the user press enter we search based on the actual input text
 const handleEnter = async () => {
-  clearTimeout(timer);
-
   const currentQuery = query.value.trim();
 
-  // 1. The input is empty we get the user cords
   if (currentQuery === "") {
     cords.value = await getUserLocation();
     document.getElementById("stop")?.blur();
     return;
   }
 
-  // 2. Not long enought
-  if (currentQuery.length < 3) return;
-
-  // 3. We get the first suggestion
-  const resultData = await search();
-
-  if (resultData && resultData.length > 0) {
-    selectDirection(resultData[0]);
-    document.getElementById("stop")?.blur();
+  if (currentQuery.length < 3) {
+    showError("Por favor, escribe al menos 3 letras.");
+    return;
+  }
+  searching.value = true;
+  try {
+    const resultData = await searchLocation(currentQuery);
+    if (resultData && resultData.length > 0) {
+      selectDirection(resultData[0]);
+      document.getElementById("stop")?.blur();
+    } else {
+      showError("No se ha encontrado ninguna calle con ese nombre.");
+    }
+  } catch (error) {
+    showError("Error al buscar la calle.");
+  } finally {
+    searching.value = false;
   }
 };
 </script>
 
 <template>
-  <div class="relative w-full max-w-lg mx-auto mt-4 z-50">
+  <div class="relative w-full max-w-lg mx-auto pt-4 z-50">
     <div class="flex items-center gap-4">
       <div class="relative flex-1">
         <input
@@ -149,6 +135,7 @@ const handleEnter = async () => {
         <SwitchTheme />
       </div>
     </div>
+
     <ul
       v-if="suggestions.length > 0"
       class="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
@@ -165,5 +152,9 @@ const handleEnter = async () => {
         </p>
       </li>
     </ul>
+
+    <div v-if="errorText" class="absolute w-full mt-2 z-50">
+      <errorMessage :message="errorText" />
+    </div>
   </div>
 </template>
