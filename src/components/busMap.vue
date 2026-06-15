@@ -1,7 +1,9 @@
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import "leaflet/dist/leaflet.css";
 import { getStops } from "../services/emtService";
+import { cords } from "../utils/mapStore.js";
+import { getUserLocation } from "../utils/utils.js";
 import {
   LMap,
   LTileLayer,
@@ -29,21 +31,30 @@ const visibleStops = computed(() => {
   });
 });
 
+watch(cords, (newCords) => {
+  if (newCords && newCords.length === 2) {
+    if (mapRef.value && mapRef.value.leafletObject) {
+      mapRef.value.leafletObject.flyTo(newCords, 17, {
+        animate: true,
+        duration: 1.5,
+      });
+    }
+
+    userLocation.value = newCords;
+  }
+});
+
 onMounted(async () => {
-  if ("geolocation" in navigator) {
-    navigator.geolocation.getCurrentPosition((position) => {
-      const coords = [position.coords.latitude, position.coords.longitude];
+  const coords = await getUserLocation();
 
-      if (mapRef.value) {
-        mapRef.value.leafletObject.flyTo(coords, 16, {
-          animate: true,
-          duration: 1,
-        });
-      }
-
-      userLocation.value = coords;
+  if (mapRef.value && mapRef.value.leafletObject) {
+    mapRef.value.leafletObject.flyTo(coords, 16, {
+      animate: true,
+      duration: 1,
     });
   }
+
+  userLocation.value = coords;
 
   allStops.value = await getStops();
 });

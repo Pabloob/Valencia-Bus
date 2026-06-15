@@ -1,28 +1,31 @@
 <script setup>
 import { ref } from "vue";
+import SwitchTheme from "./switchTheme.vue";
+import { cords } from "../utils/mapStore.js";
+import { getUserLocation } from "../utils/utils.js";
 
 // States
 const query = ref("");
 const suggestions = ref([]);
 const searching = ref(false);
-
-//Variable for debounce time
+const isFocused = ref(false);
 let timer = null;
 
-//Suggestions for destination
+// Get streets based on user input
+const search = async () => {
+  searching.value = true;
 
-const handleDestination = () => {
-  clearTimeout(timer);
+  try {
 
-  if (query.value.length < 3) {
-    suggestions.value = [];
-    return;
-  }
+    const hasNumber = /\d+/.test(query.value);
+    
+    const searchText = hasNumber ? query.value : `${query.value} 1`;
 
-  timer = setTimeout(async () => {
-    searching.value = true;
-    const url = `https://www.cartociudad.es/geocoder/api/geocoder/candidates?q=${query.value}, Valencia&limit=5`;
+    const url = `https://www.cartociudad.es/geocoder/api/geocoder/candidates?q=${searchText}, Valencia&limit=5`;
     const response = await fetch(url);
+
+    if (!response.ok) throw new Error("La API no responde");
+
     let data = await response.json();
 
     const numberMatch = query.value.match(/\d+/);
@@ -35,10 +38,32 @@ const handleDestination = () => {
     }
 
     suggestions.value = data;
+
+    return data;
+  } catch (error) {
+    suggestions.value = [];
+    return [];
+  } finally {
     searching.value = false;
-  }, 200);
+  }
 };
 
+//
+const handleDestination = () => {
+  clearTimeout(timer);
+
+  if (query.value.trim().length < 3) {
+    suggestions.value = [];
+    searching.value = false;
+    return;
+  }
+
+  timer = setTimeout(() => {
+    search();
+  }, 150);
+};
+
+// Send cords of the selected street to the global const used in the map
 const selectDirection = (suggestion) => {
   const type = suggestion.tip_via || "";
   const portalNumber = suggestion.portalNumber
@@ -47,57 +72,94 @@ const selectDirection = (suggestion) => {
 
   query.value = `${type} ${suggestion.address}${portalNumber}`.trim();
   suggestions.value = [];
+  searching.value = false;
 
-  const lat = suggestion.lat;
-  const lng = suggestion.lng;
-  console.log("Coordenadas del portal:", lat, lng);
+  cords.value = [parseFloat(suggestion.lat), parseFloat(suggestion.lng)];
+};
+
+//If the user press enter we search based on the actual input text
+const handleEnter = async () => {
+  clearTimeout(timer);
+
+  const currentQuery = query.value.trim();
+
+  // 1. The input is empty we get the user cords
+  if (currentQuery === "") {
+    cords.value = await getUserLocation();
+    document.getElementById("stop")?.blur();
+    return;
+  }
+
+  // 2. Not long enought
+  if (currentQuery.length < 3) return;
+
+  // 3. We get the first suggestion
+  const resultData = await search();
+
+  if (resultData && resultData.length > 0) {
+    selectDirection(resultData[0]);
+    document.getElementById("stop")?.blur();
+  }
 };
 </script>
 
 <template>
-  <div class="top-bar-section">
-    <div class="relative">
-      <input
-        id="stop"
-        v-model="query"
-        @input="handleDestination"
-        name="stop"
-        type="text"
-        placeholder="¿Dónde quieres ir?"
-        class="top-bar-input"
-      />
-      <div v-if="searching" class="absolute right-3 top-3 text-gray-400">
-        <svg
-          class="animate-spin h-5 w-5 text-blue-500"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
+  <div class="relative w-full max-w-lg mx-auto mt-4 z-50">
+    <div class="flex items-center gap-4">
+      <div class="relative flex-1">
+        <input
+          id="stop"
+          v-model="query"
+          @input="handleDestination"
+          @focus="isFocused = true"
+          @blur="isFocused = false"
+          @keydown.enter.prevent="handleEnter"
+          name="stop"
+          type="text"
+          placeholder="¿Dónde quieres ir?"
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div
+          v-if="searching && isFocused && query.length >= 3"
+          class="absolute right-3 top-3 text-gray-400"
         >
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          ></circle>
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
-        </svg>
+          <svg
+            class="animate-spin h-5 w-5 text-blue-500"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+        </div>
+      </div>
+      <div class="flex-shrink-0">
+        <SwitchTheme />
       </div>
     </div>
-
-    <ul v-if="suggestions.length > 0" class="top-bar-suggestion-container">
+    <ul
+      v-if="suggestions.length > 0"
+      class="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+    >
       <li
         v-for="suggestion in suggestions"
         :key="suggestion.id"
-        @click="selectDirection(suggestion)"
-        class="top-bar-suggestion"
+        @mousedown="selectDirection(suggestion)"
+        class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 border-gray-100 transition-colors"
       >
-        <p class="top-bar-suggestion-text">
+        <p class="text-sm font-medium text-gray-800">
           {{ suggestion.address }}
           {{ suggestion.portalNumber ? suggestion.portalNumber : "" }}
         </p>
@@ -105,21 +167,3 @@ const selectDirection = (suggestion) => {
     </ul>
   </div>
 </template>
-
-<style scoped>
-.top-bar-section {
-  @apply relative w-full max-w-lg mx-auto mt-4 z-50;
-}
-.top-bar-input {
-  @apply w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500;
-}
-.top-bar-suggestion-container {
-  @apply absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50;
-}
-.top-bar-suggestion {
-  @apply px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 border-gray-100 transition-colors z-50;
-}
-.top-bar-suggestion-text {
-  @apply text-sm font-medium text-gray-800 z-50;
-}
-</style>
