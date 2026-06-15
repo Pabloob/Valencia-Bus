@@ -1,6 +1,10 @@
 <template>
-  <TopBar />
-  <BusMap />
+  <div
+    class="bg-[var(--bg-main)] text-[var(--text-main)] mt-[0] min-h-screen transition-colors duration-300 ease-in-out"
+  >
+    <TopBar />
+    <BusMap />
+  </div>
 </template>
 
 <script>
@@ -15,14 +19,3 @@ export default {
   },
 };
 </script>
-
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
-</style>
