@@ -8,8 +8,8 @@
 </template>
 
 <script>
-import BusMap from "./components/busMap.vue";
-import TopBar from "./components/topBar.vue";
+import BusMap from "./components/BusMap.vue";
+import TopBar from "./components/SearchHeader.vue";
 
 export default {
   name: "App",
