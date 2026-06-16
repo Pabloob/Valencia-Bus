@@ -1,4 +1,4 @@
-import { decodePolyline } from '../utils/utils.js';
+import { decodePolyline } from '../utils/helpers.js';
 
 //Get API key from environment variables
 const GOOGLE_API_KEY = process.env.VUE_APP_GOOGLE_API_KEY;
@@ -27,12 +27,23 @@ const buildRequestBody = (lat1, lng1, lat2, lng2) => ({
 });
 
 //Clean and format the raw API response into our app's format
-const mapRouteResponse = (route) => ({
-    duration: route.duration,
-    distance: route.distanceMeters,
-    steps: route.legs[0].steps,
-    coordinates: decodePolyline(route.polyline.encodedPolyline)
-});
+const mapRouteResponse = (route) => {
+    const segments = route.legs[0].steps.map((step) => ({
+        mode: step.travelMode,
+        coords: decodePolyline(step.polyline.encodedPolyline),
+    }));
+
+    //Flattens all coordinates into a single array for map bounds calculation
+    const allCoords = segments.flatMap((segment) => segment.coords);
+
+    return {
+        duration: route.duration,
+        distance: route.distanceMeters,
+        steps: route.legs[0].steps,
+        segments: segments,
+        allCoords: allCoords,
+    };
+};
 
 export const getRoute = async (originCoords, destinationCoords, { signal } = {}) => {
     //Ensure coordinates are numbers
