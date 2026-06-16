@@ -1,50 +1,71 @@
 <script setup>
-import { ref } from "vue";
-import SwitchTheme from "./switchTheme.vue";
-import { searchLocation } from "@/services/geoService.js";
-import { cords } from "../utils/mapStore.js";
-import { getUserLocation, debounce } from "../utils/utils.js";
-import errorMessage from "./errorMessage.vue";
+import { ref, onBeforeUnmount } from "vue";
+import SwitchTheme from "./ThemeToggle.vue";
+import { searchLocation } from "@/services/geocodingService.js";
+import { cords } from "../utils/globalState.js";
+import { getUserLocation, debounce } from "../utils/helpers.js";
+import ErrorMessage from "./AlertMessage.vue";
+import spinnerIcon from "./icons/IconLoadingSpinner.vue";
 
-// States
+const MIN_QUERY_LENGTH = 3;
+const ERROR_DISPLAY_MS = 3000;
+
+//UI states
 const query = ref("");
 const suggestions = ref([]);
 const searching = ref(false);
 const isFocused = ref(false);
-let timer = null;
 
-// Error variables
+//Error handling variables
 const errorText = ref("");
 let errorTimer = null;
 
+//Controls the ongoing search request to allow cancellation
+//and prevent race conditions from outdated responses
+let searchAbortController = null;
+
+//Shows a temporary error message for 3 seconds
 const showError = (msg) => {
   errorText.value = msg;
   clearTimeout(errorTimer);
   errorTimer = setTimeout(() => {
     errorText.value = "";
-  }, 3000);
+  }, ERROR_DISPLAY_MS);
 };
 
-// Get streets based on user input
+//Runs a location search, handling cancellation and shared error/loading state
+const runSearch = async (text) => {
+  searchAbortController?.abort();
+  searchAbortController = new AbortController();
 
+  searching.value = true;
+  try {
+    return await searchLocation(text, { signal: searchAbortController.signal });
+  } catch (error) {
+    if (error.name === "AbortError") return null;
+    throw error;
+  } finally {
+    searching.value = false;
+  }
+};
+
+//Fetches street suggestions while typing (with a 150ms delay)
 const handleDestination = debounce(async () => {
-  if (query.value.trim().length < 3) {
+  if (query.value.trim().length < MIN_QUERY_LENGTH) {
     suggestions.value = [];
     return;
   }
 
-  searching.value = true;
   try {
-    suggestions.value = await searchLocation(query.value);
+    const result = await runSearch(query.value);
+    if (result !== null) suggestions.value = result;
   } catch (error) {
-    showError("No se ha podido conectar con el buscador.");
+    showError("Could not connect to the search engine.");
     suggestions.value = [];
-  } finally {
-    searching.value = false;
   }
 }, 150);
 
-// Send cords of the selected street to the global const used in the map
+//Updates global coordinates when a street suggestion is clicked
 const selectDirection = (suggestion) => {
   const type = suggestion.tip_via || "";
   const portalNumber = suggestion.portalNumber
@@ -58,35 +79,41 @@ const selectDirection = (suggestion) => {
   cords.value = [parseFloat(suggestion.lat), parseFloat(suggestion.lng)];
 };
 
-//If the user press enter we search based on the actual input text
+//Handles the Enter key press in the search input
 const handleEnter = async () => {
   const currentQuery = query.value.trim();
 
+  //If input is empty, reset route
   if (currentQuery === "") {
-    cords.value = await getUserLocation();
-    document.getElementById("stop")?.blur();
+    cords.value = null;
     return;
   }
 
-  if (currentQuery.length < 3) {
-    showError("Por favor, escribe al menos 3 letras.");
+  //Prevent searching with less than minimum characters
+  if (currentQuery.length < MIN_QUERY_LENGTH) {
+    showError("Please enter at least 3 characters.");
     return;
   }
-  searching.value = true;
+
   try {
-    const resultData = await searchLocation(currentQuery);
-    if (resultData && resultData.length > 0) {
+    const resultData = await runSearch(currentQuery);
+    if (resultData === null) return;
+
+    if (resultData.length > 0) {
       selectDirection(resultData[0]);
-      document.getElementById("stop")?.blur();
     } else {
-      showError("No se ha encontrado ninguna calle con ese nombre.");
+      showError("No street found with that name.");
     }
   } catch (error) {
-    showError("Error al buscar la calle.");
-  } finally {
-    searching.value = false;
+    showError("Error searching for the street.");
   }
 };
+
+//Cleanup on component unmount
+onBeforeUnmount(() => {
+  searchAbortController?.abort();
+  clearTimeout(errorTimer);
+});
 </script>
 
 <template>
@@ -106,29 +133,10 @@ const handleEnter = async () => {
           class="w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <div
-          v-if="searching && isFocused && query.length >= 3"
+          v-if="searching && isFocused && query.length >= MIN_QUERY_LENGTH"
           class="absolute right-3 top-3 text-gray-400"
         >
-          <svg
-            class="animate-spin h-5 w-5 text-blue-500"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
+          <spinnerIcon />
         </div>
       </div>
       <div class="flex-shrink-0">
@@ -154,7 +162,7 @@ const handleEnter = async () => {
     </ul>
 
     <div v-if="errorText" class="absolute w-full mt-2 z-50">
-      <errorMessage :message="errorText" />
+      <ErrorMessage :message="errorText" />
     </div>
   </div>
 </template>
