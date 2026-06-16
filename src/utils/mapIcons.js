@@ -1,5 +1,8 @@
 import L from "leaflet";
 
+const SUPPRESSED_COLOR = "#ef4444";
+const ACTIVE_COLOR = "#1c53c3";
+
 //Base SVG template for bus stops
 const getBusSvg = (color) => `
 <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 512 512" preserveAspectRatio="xMidYMid meet">
@@ -10,16 +13,25 @@ const getBusSvg = (color) => `
 </svg>
 `;
 
-//Generates a Leaflet DivIcon with the correct color state
+//Cache of icons
+const iconCache = new Map();
+
+const buildIcon = (color) => L.divIcon({
+  html: getBusSvg(color),
+  className: "stop-marker-outer",
+  iconSize: [36, 36],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15],
+});
+
+//Generates or reuses a Leaflet DivIcon with the correct color state
 export const createBusIcon = (stop) => {
   const isSuppressed = stop.state == 1;
-  const iconColor = isSuppressed ? "#ef4444" : "#1c53c3";
+  const cacheKey = isSuppressed ? "suppressed" : "active";
 
-  return L.divIcon({
-    html: getBusSvg(iconColor),
-    className: "stop-marker-outer",
-    iconSize: [36, 36],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -15],
-  });
+  if (!iconCache.has(cacheKey)) {
+    iconCache.set(cacheKey, buildIcon(isSuppressed ? SUPPRESSED_COLOR : ACTIVE_COLOR));
+  }
+
+  return iconCache.get(cacheKey);
 };
