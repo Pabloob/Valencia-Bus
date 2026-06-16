@@ -3,8 +3,16 @@ import { ref, watch } from "vue";
 //Cords for the map view
 export const cords = ref([]);
 
-//Visibility filter for stops ('all', 'favorites', 'none')
+//Visibility filter for stops ('all', 'favorites', 'none', 'selected')
 export const stopsFilter = ref('all');
+
+//Selected bus stop
+export const selectedStop = ref(null);
+
+//Route steps
+export const routeDetails = ref(null);
+
+export const isRoutePanelOpen = ref(false);
 
 //Map tile style options
 export const MAP_STYLES = {
