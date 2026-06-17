@@ -5,7 +5,7 @@ const GOOGLE_API_KEY = process.env.VUE_APP_GOOGLE_API_KEY;
 const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 
 //Define exactly what data we want back to save bandwidth
-const FIELD_MASK = 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.steps';
+const FIELD_MASK = 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.steps,routes.legs.steps.transitDetails';
 const REQUEST_TIMEOUT_MS = 8000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -31,6 +31,9 @@ const mapRouteResponse = (route) => {
     const segments = route.legs[0].steps.map((step) => ({
         mode: step.travelMode,
         coords: decodePolyline(step.polyline.encodedPolyline),
+        lineNumber: step.transitDetails?.transitLine?.nameShort || null,
+        headsign: step.transitDetails?.headsign || null,
+        instructions: step.navigationInstruction.instructions,
     }));
 
     //Flattens all coordinates into a single array for map bounds calculation
@@ -39,7 +42,6 @@ const mapRouteResponse = (route) => {
     return {
         duration: route.duration,
         distance: route.distanceMeters,
-        steps: route.legs[0].steps,
         segments: segments,
         allCoords: allCoords,
     };

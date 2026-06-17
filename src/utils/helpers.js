@@ -3,28 +3,28 @@ let saveLocation = null;
 //Default map center (Ayuntamiento Valencia) if GPS fails or is denied 
 const DEFAULT_LOCATION = [39.4699, -0.3763];
 
-//Get the user's current coordinates
+//Get the user's current coordinates and if it is the real location
 export const getUserLocation = () => {
     return new Promise((resolve) => {
         //Return cached location if it already exists
         if (saveLocation) {
-            return resolve(saveLocation);
+            return resolve({ coords: saveLocation, isRealLocation: true });
         }
 
         //Check if the browser supports geolocation
         if (!("geolocation" in navigator)) {
-            return resolve(DEFAULT_LOCATION);
+            return resolve({ coords: DEFAULT_LOCATION, isRealLocation: false });
         }
 
         //Request GPS position
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 saveLocation = [position.coords.latitude, position.coords.longitude];
-                resolve(saveLocation);
+                resolve({ coords: saveLocation, isRealLocation: true });
             },
             (error) => {
                 console.warn("Geolocalización rechazada o fallida:", error.message);
-                resolve(DEFAULT_LOCATION);
+                resolve({ coords: DEFAULT_LOCATION, isRealLocation: false });
             },
             {
                 enableHighAccuracy: false,

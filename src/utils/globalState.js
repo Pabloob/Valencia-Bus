@@ -1,7 +1,15 @@
 import { ref, watch } from "vue";
 
-//Cords for the map view
-export const cords = ref([]);
+//Origin/destination coordinates for route calculation
+export const originCords = ref(null);
+export const destinyCords = ref(null);
+
+//The user's real GPS location
+export const gpsCords = ref(null);
+
+//Origin selection mode: 'gps' (using user's real-time location),
+//'manual' (user typed/selected a specific address), or null (no origin yet).
+export const originMode = ref(null);
 
 //Visibility filter for stops ('all', 'favorites', 'none', 'selected')
 export const stopsFilter = ref('all');
@@ -33,3 +41,11 @@ export const favoriteStops = ref(saved ? JSON.parse(saved) : []);
 watch(favoriteStops, (newFavorites) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(newFavorites));
 }, { deep: true });
+
+//Resets the whole route/panel state
+export const resetRoute = () => {
+  destinyCords.value = null;
+  routeDetails.value = null;
+  isRoutePanelOpen.value = false;
+  selectedStop.value = null;
+};
