@@ -29,6 +29,7 @@ import {
 import Stops from "./BusStopMarkers.vue";
 import MapOptions from "./MapControls.vue";
 import RoutePanel from "./RouteStepsPanel.vue";
+import ErrorMessage from "./AlertMessage.vue";
 
 //Map and UI states
 const loading = ref(true);
@@ -44,6 +45,20 @@ const showRightClickPanel = ref(false);
 const mouseCoords = ref(null);
 
 let routeAbortController = null;
+
+//Error handling variables
+const errorText = ref("");
+let errorTimer = null;
+const ERROR_DISPLAY_MS = 3000;
+
+//Shows a temporary error message for 3 seconds
+const showError = (msg) => {
+  errorText.value = msg;
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => {
+    errorText.value = "";
+  }, ERROR_DISPLAY_MS);
+};
 
 //Filters stops based on current view bounds and global user filters
 const visibleStops = computed(() => {
@@ -93,7 +108,6 @@ const flyTo = (coords, zoomLevel = 17) => {
 
 //Handles right-click events on the map surface
 const handleRightClick = (e) => {
-
   //Remove the icon if the user click in the same place aprox
   if (showRightClickPanel.value && mouseCoords.value) {
     const [oldLat, oldLng] = mouseCoords.value;
@@ -160,6 +174,7 @@ const calculateRoute = async (origin, destination) => {
       });
     }
   } else {
+    showError("No se ha podido obtener la ruta");
     routeSegments.value = [];
     resetRoute();
   }
@@ -205,6 +220,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div
+    v-if="errorText"
+    class="fixed top-32 left-0 right-0 mx-auto w-[90%] md:w-[50%] z-[9999]"
+  >
+    <ErrorMessage :message="errorText" />
+  </div>
+  <div
     class="w-[90%] mx-auto h-[600px] rounded-xl overflow-hidden shadow-inner mt-4 border border-gray-200 relative z-0 flex justify-center items-center bg-gray-50 dark:bg-[#F6EFE4]"
   >
     <div
@@ -226,7 +247,6 @@ onBeforeUnmount(() => {
         Buscando paradas cercanas...
       </p>
     </div>
-
     <l-map
       v-else
       ref="mapRef"
@@ -292,7 +312,6 @@ onBeforeUnmount(() => {
         </l-popup>
       </l-circle-marker>
     </l-map>
-
     <div
       v-if="!loading"
       class="absolute bottom-4 right-4 z-[1000] flex items-center gap-3"

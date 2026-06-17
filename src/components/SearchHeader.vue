@@ -58,7 +58,6 @@ const runSearch = async (text) => {
     return await searchLocation(text, { signal: searchAbortController.signal });
   } catch (error) {
     if (error.name === "AbortError") return null;
-    console.log(error);
     throw error;
   } finally {
     if (searchAbortController === currentController) {
@@ -82,9 +81,10 @@ const handleSearch = debounce(async () => {
     if (result !== null) suggestions.value = result;
   } catch (error) {
     showError("No se ha podido conectar con el buscador.");
-    suggestions.value = [];
+
+    // suggestions.value = [];
   }
-}, 150);
+}, 500);
 
 //Origin input uses a manual value/@input binding (instead of v-model)
 //because its displayed value depends on isShowingGpsLabel, not just
@@ -102,6 +102,8 @@ const setActiveInput = (type) => {
 
 //Updates global coordinates when a street suggestion is clicked
 const selectDirection = (suggestion) => {
+  searchAbortController?.abort();
+
   const type = suggestion.tip_via || "";
   const portalNumber = suggestion.portalNumber
     ? ` ${suggestion.portalNumber}`
@@ -118,7 +120,6 @@ const selectDirection = (suggestion) => {
     destinyCords.value = coords;
   }
   suggestions.value = [];
-  activeInput.value = null;
 };
 
 //If origin is left empty after editing, restore the real GPS location
@@ -126,7 +127,9 @@ const selectDirection = (suggestion) => {
 //Otherwise the input stays empty with the "Selecciona tu origen"
 //placeholder, instead of dishonestly claiming a location we don't have.
 const handleOriginBlur = () => {
+  if (activeInput.value === "origin") activeInput.value = null;
   setTimeout(() => {
+    suggestions.value = [];
     if (queryOrigin.value.trim() !== "") return;
 
     if (gpsCords.value) {
@@ -141,6 +144,7 @@ const handleOriginBlur = () => {
 
 //Clears suggestions when clicking outside
 const handleDestinyBlur = () => {
+  if (activeInput.value === "destiny") activeInput.value = null;
   setTimeout(() => {
     suggestions.value = [];
   }, 200);
