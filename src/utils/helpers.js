@@ -29,7 +29,7 @@ export const getUserLocation = () => {
             {
                 enableHighAccuracy: false,
                 maximumAge: 180000,
-                timeout: 5000 //Timeout after 5 seconds
+                timeout: 10000 //Timeout after 10 seconds
             }
         );
     });
