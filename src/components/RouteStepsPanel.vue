@@ -1,7 +1,12 @@
 <script setup>
-import { cords, isRoutePanelOpen, routeDetails } from "@/utils/globalState";
+import {
+  isRoutePanelOpen,
+  routeDetails,
+  resetRoute,
+} from "@/utils/globalState";
+
 const closePanel = () => {
-  cords.value = null;
+  resetRoute();
 };
 
 const time = (durationStr) => {
@@ -19,7 +24,7 @@ const time = (durationStr) => {
 <template>
   <div
     v-if="isRoutePanelOpen && routeDetails"
-    class="absolute top-4 right-4 w-80 bg-white rounded-xl shadow-xl z-[1000] flex flex-col max-h-[80vh] overflow-hidden border border-gray-100"
+    class="absolute top-4 right-4 w-80 bg-white rounded-xl shadow-xl z-[1000] flex flex-col max-h-[60vh] overflow-hidden border border-gray-100"
     @wheel.stop
     @mousedown.stop
     @touchstart.stop
@@ -61,19 +66,15 @@ const time = (durationStr) => {
     <div class="p-4 overflow-y-auto flex-1">
       <ul class="space-y-4">
         <li
-          v-for="(step, index) in routeDetails.steps"
+          v-for="(segment, index) in routeDetails.segments"
           :key="index"
           class="flex gap-3 text-sm text-gray-700 border-l-2 border-blue-200 pl-3 pb-2"
         >
-          <div v-if="step.navigationInstruction">
-            {{ step.navigationInstruction.instructions }}
+          <div v-if="segment.mode === 'WALK'">
+            {{ segment.instructions }}
           </div>
-          <div
-            v-else-if="step.transitDetails"
-            class="font-medium text-blue-700"
-          >
-            🚌 Toma el bus {{ step.transitDetails.transitLine.nameShort }} hacia
-            {{ step.transitDetails.headsign }}
+          <div v-else-if="segment.lineNumber" class="font-medium text-blue-700">
+            Coge el bus {{ segment.lineNumber }} hacia {{ segment.headsign }}
           </div>
           <div v-else>Avanza al siguiente punto</div>
         </li>

@@ -2,7 +2,7 @@
 import { ref, computed, onBeforeUnmount } from "vue";
 import "leaflet/dist/leaflet.css";
 import { getArrivals } from "../services/emtService";
-import { cords, selectedStop } from "../utils/globalState.js";
+import { destinyCords, selectedStop } from "../utils/globalState.js";
 import { LMarker, LPopup } from "@vue-leaflet/vue-leaflet";
 import { favoriteStops } from "../utils/globalState.js";
 import { createBusIcon } from "../utils/markerIcons.js";
@@ -51,13 +51,13 @@ const handlePopupOpen = async (stopId) => {
 
 //Clears the drawn route when the popup is closed
 const handlePopupClose = () => {
-  cords.value = null;
+  destinyCords.value = null;
 };
 
 //Handles how to arrive to that stop
 //Handles how to arrive to that stop
 const handleRoute = async (stop) => {
-  cords.value = [stop.coords[0], stop.coords[1]];
+  destinyCords.value = [stop.coords[0], stop.coords[1]];
   selectedStop.value = stop.id;
 };
 

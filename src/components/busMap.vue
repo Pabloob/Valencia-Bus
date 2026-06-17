@@ -5,17 +5,22 @@ import { getStops } from "../services/emtService";
 import { getRoute } from "@/services/googleRoutesService";
 import { getUserLocation } from "../utils/helpers.js";
 import {
-  cords,
+  originCords,
+  destinyCords,
+  originMode,
+  gpsCords,
   favoriteStops,
   selectedStop,
   stopsFilter,
   currentMapStyle,
   routeDetails,
   isRoutePanelOpen,
+  resetRoute,
 } from "../utils/globalState.js";
 import {
   LMap,
   LTileLayer,
+  LMarker,
   LPopup,
   LCircleMarker,
   LPolyline,
@@ -35,6 +40,8 @@ const bounds = ref(null);
 const userLocation = ref(null);
 const mapRef = ref(null);
 const allStops = ref([]);
+const showRightClickPanel = ref(false);
+const mouseCoords = ref(null);
 
 let routeAbortController = null;
 
@@ -71,8 +78,9 @@ const handleRefresh = async () => {
 
 //Centers the map on the user location
 const centerMap = async () => {
-  userLocation.value = await getUserLocation();
-  flyTo(userLocation.value, 17);
+  const { coords } = await getUserLocation();
+  userLocation.value = coords;
+  flyTo(coords, 17);
 };
 
 //Flies to coordinates if the map is loaded
@@ -83,21 +91,52 @@ const flyTo = (coords, zoomLevel = 17) => {
   });
 };
 
-//Watches for search coordinate changes and flies the map to the new location
-watch(cords, async (destination) => {
+//Handles right-click events on the map surface
+const handleRightClick = (e) => {
+
+  //Remove the icon if the user click in the same place aprox
+  if (showRightClickPanel.value && mouseCoords.value) {
+    const [oldLat, oldLng] = mouseCoords.value;
+    const newLatLng = e.latlng;
+
+    const distance = newLatLng.distanceTo([oldLat, oldLng]);
+
+    if (distance < 20) {
+      showRightClickPanel.value = false;
+      mouseCoords.value = null;
+      return;
+    }
+  }
+
+  mouseCoords.value = [e.latlng.lat, e.latlng.lng];
+  showRightClickPanel.value = true;
+};
+
+//Handle button of right-click
+const planRouteToPoint = () => {
+  destinyCords.value = mouseCoords.value;
+};
+
+//Calculates the route between the current origin and destination,
+//updating route state and flying the map. Cancels any in-flight request
+//before starting a new one to avoid race conditions.
+const calculateRoute = async (origin, destination) => {
   routeAbortController?.abort();
 
-  if (!destination || destination.length !== 2 || !userLocation.value) {
-    routeSegments.value = [];
-    routeDetails.value = null;
-    isRoutePanelOpen.value = false;
-    selectedStop.value = null;
+  if (!origin || !destination || destination.length !== 2) {
+    //Avoid calling resetRoute (which sets destinyCords = null) if there's
+    //nothing to reset — prevents an extra redundant watcher cycle.
+    if (routeSegments.value.length > 0 || destinyCords.value) {
+      routeSegments.value = [];
+      resetRoute();
+    }
+
     return;
   }
 
   routeAbortController = new AbortController();
 
-  const routeData = await getRoute(userLocation.value, destination, {
+  const routeData = await getRoute(origin, destination, {
     signal: routeAbortController.signal,
   });
 
@@ -107,7 +146,7 @@ watch(cords, async (destination) => {
     routeDetails.value = {
       duration: routeData.duration,
       distance: routeData.distance,
-      steps: routeData.steps,
+      segments: routeData.segments,
     };
 
     isRoutePanelOpen.value = true;
@@ -122,10 +161,15 @@ watch(cords, async (destination) => {
     }
   } else {
     routeSegments.value = [];
-    routeDetails.value = null;
-    isRoutePanelOpen.value = false;
-    selectedStop.value = null;
+    resetRoute();
   }
+};
+
+//Watches both origin and destination: recalculates the route whenever
+//either one changes, so editing the origin after a route already exists
+//(e.g. pressing Enter on the top input) also triggers a recalculation.
+watch([originCords, destinyCords], ([origin, destination]) => {
+  calculateRoute(origin, destination);
 });
 
 //Saves map limits (bounds) when the map is fully loaded
@@ -133,12 +177,24 @@ const onMapReady = (mapInstance) => {
   bounds.value = mapInstance.getBounds();
 };
 
-//Initial data fetch: gets stops and user location
+//Initial data fetch: gets stops and user location.
+//If a real GPS location is found, it's set as the default origin in "gps" mode.
 onMounted(async () => {
-  const [stops, coords] = await Promise.all([getStops(), getUserLocation()]);
+  const [stops, locationResult] = await Promise.all([
+    getStops(),
+    getUserLocation(),
+  ]);
+
   allStops.value = stops;
-  userLocation.value = coords;
-  center.value = coords;
+  userLocation.value = locationResult.coords;
+  center.value = locationResult.coords;
+
+  if (locationResult.isRealLocation) {
+    gpsCords.value = locationResult.coords;
+    originCords.value = locationResult.coords;
+    originMode.value = "gps";
+  }
+
   loading.value = false;
 });
 
@@ -175,17 +231,42 @@ onBeforeUnmount(() => {
       v-else
       ref="mapRef"
       @ready="onMapReady"
+      @contextmenu="handleRightClick"
       v-model:zoom="zoom"
       v-model:center="center"
       v-model:bounds="bounds"
       :use-global-leaflet="false"
-      :options="{ zoomControl: false, attributionControl: false }"
+      :options="{
+        zoomControl: false,
+        attributionControl: false,
+      }"
       class="w-full h-full"
     >
       <l-tile-layer :url="currentMapStyle" layer-type="base" name="Carto Map" />
 
       <Stops v-if="showStops" :visibleStops="visibleStops" />
       <RoutePanel />
+
+      <l-marker
+        v-if="showRightClickPanel && mouseCoords"
+        :lat-lng="mouseCoords"
+      >
+        <l-popup :options="{ closeButton: true, autoClose: false }">
+          <div class="p-1 text-center">
+            <p class="text-xs text-gray-500 mb-2 mt-0">
+              Ubicación seleccionada
+            </p>
+
+            <button
+              type="button"
+              @click="planRouteToPoint"
+              class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-4 rounded shadow-sm transition-colors w-full"
+            >
+              📍 Llegar aquí
+            </button>
+          </div>
+        </l-popup>
+      </l-marker>
 
       <l-polyline
         v-for="(segment, index) in routeSegments"
